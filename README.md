@@ -144,15 +144,15 @@ Generates type-safe PropertyReference enums from DTO projections.
 ```java
 @Projection(from = User.class)
 @Exposure("users")
-public class UserDTO {
+public interface UserDTO {
     
     @Projected
     @ExposedAs(value = "USERNAME", operators = {Op.EQ, Op.MATCHES})
-    private String username;
+    String getUsername();
     
     @Projected
     @ExposedAs(value = "AGE", operators = {Op.GT, Op.LT})
-    private Integer age;
+    Integer getAge();
 }
 ```
 
@@ -455,21 +455,19 @@ import io.github.cyfko.filterql.core.api.Op;
 
 @Projection(from = User.class)
 @Exposure(value = "users", basePath = "/api/v1")
-public class UserDTO {
+public interface UserDTO {
     
     @Projected
     @ExposedAs(value = "USERNAME", operators = {Op.EQ, Op.MATCHES, Op.IN})
-    private String username;
+    String getUsername();
     
     @Projected
     @ExposedAs(value = "EMAIL", operators = {Op.EQ, Op.MATCHES})
-    private String email;
+    String getEmail();
     
     @Projected
     @ExposedAs(value = "AGE", operators = {Op.EQ, Op.GT, Op.LT, Op.GTE, Op.LTE})
-    private Integer age;
-    
-    // Getters/Setters...
+    Integer getAge();
 }
 ```
 
@@ -639,8 +637,8 @@ jar tf filterql-spring-processor-4.0.0.jar | grep "\.tpl$"
 
 ```bash
 # Clone repository
-git clone https://github.com/cyfko/filterql.git
-cd filterql/modules/adapters/filterql-spring-processor
+git clone https://github.com/cyfko/filterql-spring-processor.git
+cd filterql-spring-processor
 
 # Build and install
 mvn clean install
@@ -658,7 +656,7 @@ mvn test
 
 ## 📄 License
 
-This project is licensed under the MIT License. See the [LICENSE](../../../LICENSE) file for details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 ## 👤 Author
 
@@ -672,6 +670,6 @@ This project is licensed under the MIT License. See the [LICENSE](../../../LICEN
 - [GitHub Repository](https://github.com/cyfko/filterql)
 - [Issue Tracker](https://github.com/cyfko/filterql/issues)
 - [Maven Central](https://search.maven.org/artifact/io.github.cyfko/filterql-spring-processor)
-- [FilterQL Spring API](../filterql-spring-api/README.md)
-- [FilterQL JPA Adapter](../filterql-jpa/README.md)
+- [FilterQL Spring API](https://github.com/cyfko/filter-ql/tree/main/filterql-spring)
+- [FilterQL JPA Adapter](https://github.com/cyfko/filter-ql/tree/main/filterql-jpa)
 - [Projection Specification](https://github.com/cyfko/projection-spec)

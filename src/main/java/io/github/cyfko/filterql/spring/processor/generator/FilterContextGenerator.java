@@ -70,10 +70,18 @@ public class FilterContextGenerator {
         }
     }
 
+    /**
+     * Registers a projection's configuration generation context.
+     *
+     * @param packageName    the target package name
+     * @param projectionFqcn the fully qualified class name of the projection
+     * @param fields         the list of fields to include in the filter context
+     * @param entityClass    the fully qualified class name of the target entity
+     */
     public void register(String packageName,
-                         String projectionFqcn,
-                         List<FieldMetadata> fields,
-                         String entityClass) {
+            String projectionFqcn,
+            List<FieldMetadata> fields,
+            String entityClass) {
 
         boolean hasVirtualFields = fields.stream().anyMatch(FieldMetadata::isVirtual);
         String contextParam = hasVirtualFields ? "InstanceResolver instanceResolver" : "";

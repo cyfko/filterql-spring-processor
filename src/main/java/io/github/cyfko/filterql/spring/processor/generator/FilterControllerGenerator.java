@@ -15,23 +15,28 @@ import static io.github.cyfko.filterql.spring.processor.util.ExposureUtils.valid
 import static io.github.cyfko.filterql.spring.processor.util.ExposureUtils.validateHandlerMethod;
 
 /**
- * Generates the source code for the FilterQL REST search controller based on entity and DTO metadata.
+ * Generates the source code for the FilterQL REST search controller based on
+ * entity and DTO metadata.
  * <p>
- * Used by the FilterQL annotation processor to produce controller classes exposing search endpoints
- * for each filtered entity, including DTO mapping, request validation, and repository integration.
+ * Used by the FilterQL annotation processor to produce controller classes
+ * exposing search endpoints
+ * for each filtered entity, including DTO mapping, request validation, and
+ * repository integration.
  * </p>
  *
  * <h2>Usage Context</h2>
  * <ul>
- *   <li>Invoked during annotation processing for each {@link Exposure} entity</li>
- *   <li>Produces Java source code for REST controllers via templating</li>
- *   <li>Handles endpoint generation, import management, and DTO mapping logic</li>
+ * <li>Invoked during annotation processing for each {@link Exposure}
+ * entity</li>
+ * <li>Produces Java source code for REST controllers via templating</li>
+ * <li>Handles endpoint generation, import management, and DTO mapping
+ * logic</li>
  * </ul>
  *
  * <h2>Extension Points</h2>
  * <ul>
- *   <li>Custom templates via {@link TemplateEngine}</li>
- *   <li>Override for advanced endpoint or mapping logic</li>
+ * <li>Custom templates via {@link TemplateEngine}</li>
+ * <li>Override for advanced endpoint or mapping logic</li>
  * </ul>
  *
  * @author cyfko
@@ -58,19 +63,21 @@ public class FilterControllerGenerator {
     /**
      * Registers a new search endpoint for the given entity and DTO mapping.
      *
-     * @param processingEnv annotation processing environment
+     * @param processingEnv   annotation processing environment
      * @param projectionClass projection class element
      */
     public void register(ProcessingEnvironment processingEnv, TypeElement projectionClass) {
         Exposure exposure = projectionClass.getAnnotation(Exposure.class);
-        if (exposure == null) return;
+        if (exposure == null)
+            return;
 
         // --- Nom exposé sécurisé
         final String projectionFqcn = projectionClass.getQualifiedName().toString();
         final String projectionSimpleName = projectionClass.getSimpleName().toString();
         final String exposedName = toExposedName(exposure, projectionSimpleName);
         final String basePath = toBasePath(exposure);
-        final String methodName = exposure.endpointName().isBlank() ? "search" + projectionSimpleName :  exposure.endpointName();
+        final String methodName = exposure.endpointName().isBlank() ? "search" + projectionSimpleName
+                : exposure.endpointName();
         final String fqEnumName = toEnumRef(projectionClass);
 
         StringBuilder reqTransformation = new StringBuilder();
@@ -81,13 +88,13 @@ public class FilterControllerGenerator {
                 Exposure.class.getCanonicalName(),
                 props -> {
                     if (props.containsKey("pipes")) {
-                        //noinspection unchecked
+                        // noinspection unchecked
                         List<Map<String, Object>> pipesProp = (List<Map<String, Object>>) props.get("pipes");
                         generateRequestTransformation(pipesProp, reqTransformation, projectionClass, processingEnv);
                     }
 
                     if (props.containsKey("handler")) {
-                        //noinspection unchecked
+                        // noinspection unchecked
                         Map<String, Object> handlerProp = (Map<String, Object>) props.get("handler");
                         generateHandlerExpression(handlerProp, handler, projectionClass, endpointReturn, processingEnv);
                     } else { // Default behavior
@@ -96,12 +103,11 @@ public class FilterControllerGenerator {
                         handler.append("searchService.searchAs(").append(projectionFqcn).append(".class, req)");
                         setEndpointReturnType(projectionClass, strategy, endpointReturn, "Object");
 
-                        if (strategy == Exposure.Strategy.LIST){
+                        if (strategy == Exposure.Strategy.LIST) {
                             handler.append(".data()");
                         }
                     }
-                }, null
-        );
+                }, null);
 
         try {
             String searchTemplate = templateEngine.loadTemplate("search-endpoint.java.tpl");
@@ -126,23 +132,41 @@ public class FilterControllerGenerator {
 
     }
 
+    /**
+     * Configures the return type of the generated endpoint method based on the
+     * strategy.
+     *
+     * @param projectionClass the projection class element
+     * @param strategy        the exposure strategy (LIST, PAGINATED, etc.)
+     * @param endpointReturn  the StringBuilder to append the return type to
+     * @param customFallback  fallback return type for CUSTOM strategy
+     */
     private static void setEndpointReturnType(TypeElement projectionClass,
-                                              Exposure.Strategy strategy,
-                                              StringBuilder endpointReturn,
-                                              String customFallback) {
+            Exposure.Strategy strategy,
+            StringBuilder endpointReturn,
+            String customFallback) {
         String projectionFqcn = projectionClass.getQualifiedName().toString();
         switch (strategy) {
             case PAGINATED -> endpointReturn.append("PaginatedData<" + projectionFqcn + ">");
-            case LIST -> endpointReturn.append("List<" +projectionFqcn + ">");
+            case LIST -> endpointReturn.append("List<" + projectionFqcn + ">");
             case CUSTOM -> endpointReturn.append(customFallback);
         }
     }
 
+    /**
+     * Generates the code for a custom handler or default service call.
+     *
+     * @param handlerProp           properties of the handler definition
+     * @param sb                    StringBuilder for the handler code
+     * @param projectionClass       the projection class
+     * @param endpointReturnBuilder StringBuilder for the return type
+     * @param processingEnv         processing environment
+     */
     private void generateHandlerExpression(Map<String, Object> handlerProp,
-                                           StringBuilder sb,
-                                           TypeElement projectionClass,
-                                           StringBuilder endpointReturnBuilder,
-                                           ProcessingEnvironment processingEnv) {
+            StringBuilder sb,
+            TypeElement projectionClass,
+            StringBuilder endpointReturnBuilder,
+            ProcessingEnvironment processingEnv) {
         try {
             if (!handlerProp.containsKey("value")) {
                 throw new IllegalArgumentException("method name required for explicit handler");
@@ -160,12 +184,13 @@ public class FilterControllerGenerator {
             final String errorMessage = String.format("""
                     Expected method signature of handler not found. Searching for (%s) on class = %s. Strategy = %s
                     """,
-                    methodName, className, strategy
-            );
-            ExecutableElement targetMethod = validateHandlerMethod(classElement, methodName, strategy, projectionClass, processingEnv)
+                    methodName, className, strategy);
+            ExecutableElement targetMethod = validateHandlerMethod(classElement, methodName, strategy, projectionClass,
+                    processingEnv)
                     .orElseThrow(() -> new IllegalArgumentException(errorMessage));
 
-            setEndpointReturnType(projectionClass, strategy, endpointReturnBuilder, targetMethod.getReturnType().toString());
+            setEndpointReturnType(projectionClass, strategy, endpointReturnBuilder,
+                    targetMethod.getReturnType().toString());
 
             boolean isStaticMethod = targetMethod.getModifiers().contains(Modifier.STATIC);
             if (isStaticMethod) {
@@ -180,11 +205,18 @@ public class FilterControllerGenerator {
         }
     }
 
+    /**
+     * Generates code to apply a series of transformation pipes to the request.
+     *
+     * @param pipes           list of pipe definitions
+     * @param sb              StringBuilder for the transformation code
+     * @param projectionClass the projection class
+     * @param processingEnv   processing environment
+     */
     private void generateRequestTransformation(List<Map<String, Object>> pipes,
-                                               StringBuilder sb,
-                                               TypeElement projectionClass,
-                                               ProcessingEnvironment processingEnv
-                                               ) {
+            StringBuilder sb,
+            TypeElement projectionClass,
+            ProcessingEnvironment processingEnv) {
         try {
             // Parcourir la liste des pipes et les appliquer dans l'ordre décrit
             sb.append("// Applying pipes...\n");
@@ -206,9 +238,9 @@ public class FilterControllerGenerator {
                 final String errorMessage = String.format("""
                         Expected method signature of pipes[%d] not found. Searching for (%s) on class = %s
                         """,
-                        i, methodName, className
-                );
-                ExecutableElement targetMethod = validatePipeMethod(classElement, methodName, toEnumRef(projectionClass), processingEnv)
+                        i, methodName, className);
+                ExecutableElement targetMethod = validatePipeMethod(classElement, methodName,
+                        toEnumRef(projectionClass), processingEnv)
                         .orElseThrow(() -> new IllegalArgumentException(errorMessage));
 
                 boolean isStaticMethod = targetMethod.getModifiers().contains(Modifier.STATIC);
@@ -242,32 +274,38 @@ public class FilterControllerGenerator {
     }
 
     /**
-     * Computes the exposed REST resource name for the given entity, based on the specified {@link Exposure} annotation.
+     * Computes the exposed REST resource name for the given entity, based on the
+     * specified {@link Exposure} annotation.
      * <p>
-     * This method retrieves the {@code value} configured in the embedded {@link Exposure} annotation.
-     * If the value is not set or blank, it falls back to converting the entity simple name from camelCase to kebab-case
+     * This method retrieves the {@code value} configured in the embedded
+     * {@link Exposure} annotation.
+     * If the value is not set or blank, it falls back to converting the entity
+     * simple name from camelCase to kebab-case
      * following standard naming conventions.
      * </p>
      *
-     * @param exposure the {@link Exposure} exposure configuration
-     * @param entitySimpleName the simple class name of the entity (typically without package)
+     * @param exposure         the {@link Exposure} exposure configuration
+     * @param entitySimpleName the simple class name of the entity (typically
+     *                         without package)
      * @return the exposed REST resource name in kebab-case
      */
     public static String toExposedName(Exposure exposure, String entitySimpleName) {
-        return (exposure.value() != null && !exposure.value().isBlank()) ?
-                exposure.value().trim() :
-                StringUtils.camelToKebabCase(StringUtils.toCamelCase(entitySimpleName));
+        return (exposure.value() != null && !exposure.value().isBlank()) ? exposure.value().trim()
+                : StringUtils.camelToKebabCase(StringUtils.toCamelCase(entitySimpleName));
     }
 
     /**
-     * Computes the base URI path prefix for REST endpoints of the given filtered entity, based on the annotation configuration.
+     * Computes the base URI path prefix for REST endpoints of the given filtered
+     * entity, based on the annotation configuration.
      * <p>
-     * Returns the {@code basePath} specified in the embedded {@link Exposure} annotation,
+     * Returns the {@code basePath} specified in the embedded {@link Exposure}
+     * annotation,
      * trimming whitespace or returning an empty string if unspecified.
      * </p>
      *
      * @param exposure the {@link Exposure} endpoint exposure configuration
-     * @return the base URI path prefix for REST endpoints, or empty string if none is configured
+     * @return the base URI path prefix for REST endpoints, or empty string if none
+     *         is configured
      */
     public static String toBasePath(Exposure exposure) {
         return exposure.basePath() != null ? exposure.basePath().trim() : "";

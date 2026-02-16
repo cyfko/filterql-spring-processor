@@ -79,11 +79,22 @@ public class ExposureAnnotationProcessor extends AbstractProcessor {
     private boolean enumGenerated;
     private Map<TypeElement, List<FieldMetadata>> pendingProjections = new LinkedHashMap<>();
 
+    /**
+     * Returns the latest supported source version.
+     *
+     * @return the latest source version
+     */
     @Override
     public SourceVersion getSupportedSourceVersion() {
         return SourceVersion.latest();
     }
 
+    /**
+     * Initializes the processor with the processing environment.
+     * Sets up helpers for analysis, generation, and logging.
+     *
+     * @param processingEnv environment for facilities like Filer and Messager
+     */
     @Override
     public synchronized void init(ProcessingEnvironment processingEnv) {
         super.init(processingEnv);
@@ -96,13 +107,27 @@ public class ExposureAnnotationProcessor extends AbstractProcessor {
         logger.log("ExposureAnnotationProcessor initialized");
     }
 
+    /**
+     * Processes the {@link Projection} annotations in rounds.
+     * <p>
+     * Phase 1: Generates PropertyRef enums for all projections.<br>
+     * Phase 2: Generates Spring configuration and controllers once validation is
+     * complete.<br>
+     * Final Round: Writes global configuration files.
+     * </p>
+     *
+     * @param annotations annotations requested to be processed
+     * @param roundEnv    environment for information about the current and prior
+     *                    round
+     * @return false (allow other processors to inspect these annotations)
+     */
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
         logger.log("=== PROCESS ROUND START ===");
 
         if (roundEnv.processingOver()) {
             // Dernier round - générer les fichiers globaux
-            if (enumGenerated){
+            if (enumGenerated) {
                 generateConfigFiles();
             }
             return false;
@@ -125,6 +150,12 @@ public class ExposureAnnotationProcessor extends AbstractProcessor {
         return false; // Continue vers le prochain round
     }
 
+    /**
+     * analyzes a projection interface and generates the corresponding PropertyRef
+     * enum.
+     *
+     * @param projectionClass the interface annotated with @Projection
+     */
     private void generateEnumsForPropertyRef(TypeElement projectionClass) {
         String packageName = getPackageName(projectionClass);
         String projectionSimpleName = projectionClass.getSimpleName().toString();
@@ -159,13 +190,20 @@ public class ExposureAnnotationProcessor extends AbstractProcessor {
         }
     }
 
+    /**
+     * Processes a single projection artifact to generate Spring configuration and
+     * controllers.
+     *
+     * @param projectionClass the projection type element
+     */
     private void processArtefact(TypeElement projectionClass) {
         // 4. Générer la configuration Spring
         try {
             String packageName = getPackageName(projectionClass);
             String projectionFqcn = projectionClass.toString();
             String entityClassFqcn = extractEntityClassName(projectionClass.getAnnotation(Projection.class));
-            configGenerator.register(packageName, projectionFqcn, pendingProjections.get(projectionClass), entityClassFqcn);
+            configGenerator.register(packageName, projectionFqcn, pendingProjections.get(projectionClass),
+                    entityClassFqcn);
         } catch (Exception e) {
             logger.error(e.getMessage(), projectionClass);
         }
@@ -178,6 +216,10 @@ public class ExposureAnnotationProcessor extends AbstractProcessor {
         }
     }
 
+    /**
+     * Generates the global configuration files (configuration and controller) in
+     * the final processing round.
+     */
     private void generateConfigFiles() {
         try {
             String configCode = configGenerator.generate();
@@ -192,6 +234,17 @@ public class ExposureAnnotationProcessor extends AbstractProcessor {
         }
     }
 
+    /**
+     * Extracts the entity class name from the {@link Projection} annotation.
+     * <p>
+     * Handles {@link MirroredTypeException} which occurs when accessing Class
+     * tokens
+     * during annotation processing.
+     * </p>
+     *
+     * @param annotation the Projection annotation instance
+     * @return the fully qualified name of the entity class
+     */
     private String extractEntityClassName(Projection annotation) {
         try {
             return annotation.from().getName();
@@ -201,6 +254,14 @@ public class ExposureAnnotationProcessor extends AbstractProcessor {
         }
     }
 
+    /**
+     * Writes a generated source file to disk.
+     *
+     * @param packageName the package for the file
+     * @param className   the simple class name
+     * @param code        the source code content
+     * @throws IOException if writing fails
+     */
     private void writeSourceFile(String packageName, String className, String code)
             throws IOException {
         String qualifiedName = packageName + "." + className;
@@ -213,6 +274,12 @@ public class ExposureAnnotationProcessor extends AbstractProcessor {
         logger.log("Successfully wrote: " + qualifiedName);
     }
 
+    /**
+     * Retrieves the package name of a type element.
+     *
+     * @param element the type element
+     * @return the fully qualified package name
+     */
     private String getPackageName(TypeElement element) {
         return processingEnv.getElementUtils()
                 .getPackageOf(element)
