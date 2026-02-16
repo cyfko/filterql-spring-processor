@@ -16,10 +16,10 @@ import io.github.cyfko.projection.Projection;
         strategy = Exposure.Strategy.CUSTOM,
         handler = @Method(value = "handleGeometrySearch")
 )
-public class GeometryDTO {
-    private Long id;
+public interface GeometryDTO {
+    Long getId();
 
-    public static boolean handleGeometrySearch(FilterRequest<GeometryDTO_> req){
+    static boolean handleGeometrySearch(FilterRequest<GeometryDTO_> req){
         // Do something
         return true;
     }

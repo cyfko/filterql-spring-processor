@@ -2,9 +2,8 @@ package io.github.cyfko.filterql.spring.processor.generator;
 
 import io.github.cyfko.filterql.spring.Exposure;
 import io.github.cyfko.filterql.spring.processor.util.Logger;
-import io.github.cyfko.filterql.spring.processor.util.StringUtils;
-import io.github.cyfko.filterql.spring.service.FilterQlService;
 import io.github.cyfko.jpametamodel.processor.AnnotationProcessorUtils;
+import io.github.cyfko.jpametamodel.processor.StringUtils;
 
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.*;
@@ -67,11 +66,12 @@ public class FilterControllerGenerator {
         if (exposure == null) return;
 
         // --- Nom exposé sécurisé
-        String projectionSimpleName = projectionClass.getSimpleName().toString();
-        String exposedName = toExposedName(exposure, projectionSimpleName);
-        String basePath = toBasePath(exposure);
-        String methodName = exposure.endpointName().isBlank() ? "search" + projectionSimpleName :  exposure.endpointName();
-        String fqEnumName = toEnumRef(projectionClass);
+        final String projectionFqcn = projectionClass.getQualifiedName().toString();
+        final String projectionSimpleName = projectionClass.getSimpleName().toString();
+        final String exposedName = toExposedName(exposure, projectionSimpleName);
+        final String basePath = toBasePath(exposure);
+        final String methodName = exposure.endpointName().isBlank() ? "search" + projectionSimpleName :  exposure.endpointName();
+        final String fqEnumName = toEnumRef(projectionClass);
 
         StringBuilder reqTransformation = new StringBuilder();
         StringBuilder handler = new StringBuilder();
@@ -90,10 +90,12 @@ public class FilterControllerGenerator {
                         //noinspection unchecked
                         Map<String, Object> handlerProp = (Map<String, Object>) props.get("handler");
                         generateHandlerExpression(handlerProp, handler, projectionClass, endpointReturn, processingEnv);
-                    } else {
-                        handler.append("searchService.search(").append(fqEnumName).append(".class, req)");
+                    } else { // Default behavior
                         Exposure.Strategy strategy = projectionClass.getAnnotation(Exposure.class).strategy();
+
+                        handler.append("searchService.searchAs(").append(projectionFqcn).append(".class, req)");
                         setEndpointReturnType(projectionClass, strategy, endpointReturn, "Object");
+
                         if (strategy == Exposure.Strategy.LIST){
                             handler.append(".data()");
                         }
@@ -128,10 +130,10 @@ public class FilterControllerGenerator {
                                               Exposure.Strategy strategy,
                                               StringBuilder endpointReturn,
                                               String customFallback) {
+        String projectionFqcn = projectionClass.getQualifiedName().toString();
         switch (strategy) {
-            case PROJECTED -> endpointReturn.append("PaginatedData<Map<String, Object>>");
-            case PAGINATED -> endpointReturn.append("PaginatedData<" + projectionClass.toString() + ">");
-            case LIST -> endpointReturn.append("List<" + projectionClass.toString() + ">");
+            case PAGINATED -> endpointReturn.append("PaginatedData<" + projectionFqcn + ">");
+            case LIST -> endpointReturn.append("List<" +projectionFqcn + ">");
             case CUSTOM -> endpointReturn.append(customFallback);
         }
     }

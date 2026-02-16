@@ -1,10 +1,8 @@
 package io.github.cyfko.filterql.spring.processor.generator;
 
 import io.github.cyfko.filterql.spring.processor.FieldMetadata;
-import io.github.cyfko.filterql.spring.processor.util.ExposureUtils;
-import io.github.cyfko.filterql.spring.processor.util.StringUtils;
+import io.github.cyfko.jpametamodel.processor.StringUtils;
 
-import javax.lang.model.element.TypeElement;
 import java.util.*;
 import java.io.IOException;
 

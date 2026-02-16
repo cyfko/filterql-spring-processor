@@ -7,7 +7,7 @@ import io.github.cyfko.filterql.spring.processor.generator.PropertyRefEnumGenera
 import io.github.cyfko.filterql.spring.processor.generator.TemplateEngine;
 import io.github.cyfko.filterql.spring.processor.util.ExposureUtils;
 import io.github.cyfko.filterql.spring.processor.util.Logger;
-import io.github.cyfko.filterql.spring.processor.util.StringUtils;
+import io.github.cyfko.jpametamodel.processor.StringUtils;
 import io.github.cyfko.projection.Projection;
 
 import javax.annotation.processing.*;
@@ -79,11 +79,6 @@ public class ExposureAnnotationProcessor extends AbstractProcessor {
     private boolean enumGenerated;
     private Map<TypeElement, List<FieldMetadata>> pendingProjections = new LinkedHashMap<>();
 
-    // BLOC DE DEBUG - s'exécute au chargement de la classe
-    static {
-        System.out.println("🚨🚨🚨 ExposureAnnotationProcessor CLASS LOADED 🚨🚨🚨");
-    }
-
     @Override
     public SourceVersion getSupportedSourceVersion() {
         return SourceVersion.latest();
@@ -116,7 +111,7 @@ public class ExposureAnnotationProcessor extends AbstractProcessor {
         // Phase 1 : Générer tous les enums
         if (!enumGenerated) {
             for (Element element : roundEnv.getElementsAnnotatedWith(Projection.class)) {
-                if (element.getKind() == ElementKind.CLASS) {
+                if (element.getKind() == ElementKind.INTERFACE) {
                     generateEnumsForPropertyRef((TypeElement) element);
                 }
             }

@@ -10,7 +10,6 @@ import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
@@ -84,7 +83,7 @@ public class ExposureUtils {
      * @param methodName the name of the handler method
      * @param strategy the exposure strategy
      * @param projection the projection class
-     * @param processingEnv the processing environment
+     * @param penv the processing environment
      * @return an Optional containing the ExecutableElement if valid, or empty otherwise
      */
     public static Optional<ExecutableElement> validateHandlerMethod(
@@ -92,7 +91,7 @@ public class ExposureUtils {
             String methodName,
             Exposure.Strategy strategy,  // ExposureStrategy name as string
             TypeElement projection,
-            ProcessingEnvironment processingEnv) {
+            ProcessingEnvironment penv) {
 
         // Find method with public static modifiers
         return AnnotationProcessorUtils.findMethodWithSignature(
@@ -102,7 +101,7 @@ public class ExposureUtils {
                 null,  // Check return type later based on strategy
                 null,  // Check parameters later
                 false,
-                processingEnv
+                penv
         ).filter(method -> {
             // Verify first parameter is FilterRequest
             List<? extends VariableElement> parameters = method.getParameters();
@@ -110,7 +109,7 @@ public class ExposureUtils {
                 return false;
             }
 
-            Types typeUtils = processingEnv.getTypeUtils();
+            Types typeUtils = penv.getTypeUtils();
             String enumRef = toEnumRef(projection);
 
             if (parameters.size() != 1) {
@@ -118,16 +117,15 @@ public class ExposureUtils {
             }
 
             final var paramType = parameters.get(0).asType();
-            if (! typeUtils.isSameType(paramType, genericFilterRequestType(enumRef, processingEnv))){
+            if (! typeUtils.isSameType(paramType, genericFilterRequestType(enumRef, penv))){
                 return false;
             }
 
             TypeMirror returnType = method.getReturnType();
-            Elements elementUtils = processingEnv.getElementUtils();
+            Elements elementUtils = penv.getElementUtils();
             return switch (strategy) {
-                case PROJECTED -> typeUtils.isSameType(genericProjectionType(processingEnv), returnType);
-                case PAGINATED -> typeUtils.isSameType(genericOfType(PaginatedData.class.getName(), projection, processingEnv),  returnType);
-                case LIST -> typeUtils.isSameType(genericOfType("java.util.List", projection, processingEnv),  returnType);
+                case PAGINATED -> typeUtils.isSameType(parameterizedWith(PaginatedData.class.getName(), projection, penv),  returnType);
+                case LIST -> typeUtils.isSameType(parameterizedWith("java.util.List", projection, penv),  returnType);
                 case CUSTOM -> true;
             };
         });
@@ -151,24 +149,11 @@ public class ExposureUtils {
         return typeUtils.getDeclaredType(reqElement, refElement.asType());
     }
 
-    private static TypeMirror genericProjectionType(ProcessingEnvironment processingEnv) {
-        Elements elementUtils = processingEnv.getElementUtils();
-        Types typeUtils = processingEnv.getTypeUtils();
+    public static TypeMirror parameterizedWith(String parameterizedFqcn, TypeElement typeUsed, ProcessingEnvironment penv) {
+        Elements elementUtils = penv.getElementUtils();
+        Types typeUtils = penv.getTypeUtils();
 
-        TypeElement mapElement = elementUtils.getTypeElement("java.util.Map");
-        TypeElement stringElement = elementUtils.getTypeElement("java.lang.String");
-        TypeElement objElement = elementUtils.getTypeElement("java.lang.Object");
-        DeclaredType mapDeclaredType = typeUtils.getDeclaredType(mapElement, stringElement.asType(), objElement.asType());
-
-        TypeElement pageElement = elementUtils.getTypeElement(PaginatedData.class.getName());
-        return typeUtils.getDeclaredType(pageElement, mapDeclaredType);
-    }
-
-    private static TypeMirror genericOfType(String genType, TypeElement projection, ProcessingEnvironment processingEnv) {
-        Elements elementUtils = processingEnv.getElementUtils();
-        Types typeUtils = processingEnv.getTypeUtils();
-
-        TypeElement genElement = elementUtils.getTypeElement(genType);
-        return typeUtils.getDeclaredType(genElement, projection.asType());
+        TypeElement parameterizedElement = elementUtils.getTypeElement(parameterizedFqcn);
+        return typeUtils.getDeclaredType(parameterizedElement, typeUsed.asType());
     }
 }

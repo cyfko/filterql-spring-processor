@@ -12,6 +12,6 @@ import io.github.cyfko.projection.Projection;
         basePath = "/api/v1",
         strategy = Exposure.Strategy.LIST
 )
-public class SegmentDTO {
-    private Long id;
+public interface SegmentDTO {
+    Long getId();
 }

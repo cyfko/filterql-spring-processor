@@ -4,12 +4,17 @@ import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.*;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Elements;
+import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 import java.util.*;
+import java.util.function.BiConsumer;
 
+import io.github.cyfko.filterql.jpa.spi.PredicateResolver;
 import io.github.cyfko.filterql.spring.ExposedAs;
+import io.github.cyfko.filterql.spring.processor.util.ExposureUtils;
 import io.github.cyfko.filterql.spring.support.SupportedType;
 import io.github.cyfko.jpametamodel.processor.AnnotationProcessorUtils;
+import io.github.cyfko.jpametamodel.processor.StringUtils;
 import io.github.cyfko.projection.Computed;
 import io.github.cyfko.filterql.spring.support.DefaultOperatorStrategy;
 import io.github.cyfko.filterql.core.api.Op;
@@ -43,6 +48,8 @@ public class FieldAnalyzer {
 
     private final ProcessingEnvironment processingEnv;
     private final DefaultOperatorStrategy operatorStrategy;
+    List<FieldMetadata> fields;
+    Set<String> observedField;
 
     public FieldAnalyzer(ProcessingEnvironment processingEnv) {
         this.processingEnv = processingEnv;
@@ -50,86 +57,114 @@ public class FieldAnalyzer {
     }
 
     public List<FieldMetadata> analyzeProjection(TypeElement projectionClass) {
-        List<FieldMetadata> fields = new ArrayList<>();
+        fields = new ArrayList<>();
+        observedField = new HashSet<>();
 
         for (Element element : projectionClass.getEnclosedElements()) {
-            if (element.getKind() == ElementKind.FIELD && element.getAnnotation(Computed.class) == null) {
-                VariableElement field = (VariableElement) element;
-                String refName = extractRefName(field);
-                SupportedType javaType = extractJavaType(field);
-                Op[] operators = extractOperators(field, javaType);
+            Set<Modifier> modifiers = element.getModifiers();
+            if (modifiers.contains(Modifier.STATIC) || modifiers.contains(Modifier.PRIVATE)) continue; // Skip static and private element
+            if (element.getAnnotation(Computed.class) != null) continue; // Skip computed fields
 
-                fields.add(FieldMetadata.regularField(
-                        refName,
-                        field.toString(),
-                        operators
-                ));
-            } else if (element.getKind() == ElementKind.METHOD) {
-                FieldMetadata fieldMetadata = scanVirtualFieldsInClass(projectionClass, null, element);
-                if (fieldMetadata != null) {
-                    fields.add(fieldMetadata);
-                }
-            }
+            ExecutableElement methodElement = (ExecutableElement) element;
+            String refName = extractRefName(methodElement);
+            SupportedType javaType = extractJavaType(methodElement);
+            Op[] operators = extractOperators(methodElement, javaType);
+
+            fields.add(FieldMetadata.regularField(refName, StringUtils.toJavaNamingAwareFieldName(methodElement), operators));
         }
 
-        List<ProviderMirror> virtualResolverClasses = getVirtualResolversSafe(projectionClass);
-        for (ProviderMirror pm : virtualResolverClasses) {
-            for (Element element : pm.typeElement.getEnclosedElements()) {
-                if (element.getKind() != ElementKind.METHOD) continue;
-                FieldMetadata fieldMetadata = scanVirtualFieldsInClass(pm.typeElement, pm.beanName, element);
-                if (fieldMetadata != null) {
-                    fields.add(fieldMetadata);
-                }
-            }
-        }
+        // Search for virtual fields on providers
+        AnnotationProcessorUtils.processExplicitFields(
+                projectionClass,
+                Projection.class.getName(),
+                params -> {
+                    // record the target entity
+                    Elements elementUtils = processingEnv.getElementUtils();
+                    TypeElement entity = elementUtils.getTypeElement((String) params.get("from"));
+
+                    @SuppressWarnings("unchecked")
+                    List<Map<String,Object>> providers = (List<Map<String, Object>>) params.get("providers");
+                    if (providers == null) return;
+
+                    for (Map<String, Object> provider : providers) {
+                        TypeElement providerElement = elementUtils.getTypeElement((String) provider.get("value"));
+                        String beanName = (String) provider.get("name");
+                        useProvider(providerElement, beanName, entity);
+                    }
+                },
+                null
+        );
 
         return fields;
     }
 
-    private FieldMetadata scanVirtualFieldsInClass(TypeElement resolverClass, String beanName, Element element) {
-        ExposedAs annotation = element.getAnnotation(ExposedAs.class);
-        if (annotation == null) return null;
+    private void useProvider(TypeElement providerElement, String beanName, TypeElement entity){
+        for (Element providerMethod : providerElement.getEnclosedElements()) {
+            if (providerMethod.getKind() != ElementKind.METHOD) continue;
 
-        ExecutableElement method = (ExecutableElement) element;
-        TypeMirror returnType = method.getReturnType();
-        List<? extends VariableElement> params = method.getParameters();
-        
-        // Only accept: PredicateResolver<E> method(String op, Object[] args)
-        if (!returnType.toString().contains("PredicateResolver")) {
+            FieldMetadata fieldMetadata = scanVirtualFieldsInClass(
+                    providerElement,
+                    beanName,
+                    (ExecutableElement) providerMethod,
+                    entity
+            );
+
+            if (fieldMetadata != null) {
+                fields.add(fieldMetadata);
+            }
+        }
+    }
+
+    private FieldMetadata scanVirtualFieldsInClass(TypeElement resolverClass,
+                                                   String beanName,
+                                                   ExecutableElement resolverMethod,
+                                                   TypeElement entity) {
+        ExposedAs annotation = resolverMethod.getAnnotation(ExposedAs.class);
+        if (annotation == null) return null;
+        if (!resolverMethod.getModifiers().contains(Modifier.PUBLIC)) return null;
+
+        // Only consider return type PredicateResolver<E>
+        Types typeUtils = processingEnv.getTypeUtils();
+        TypeMirror predicateResolver = ExposureUtils.parameterizedWith(PredicateResolver.class.getName(), entity, processingEnv);
+        if (!typeUtils.isSameType(resolverMethod.getReturnType(), predicateResolver)) {
+            return null;
+        }
+
+        List<? extends VariableElement> params = resolverMethod.getParameters();
+
+        // Validate parameters: must be -> PredicateResolver<E> methodXyz(String op, Object[] args)
+        if (!params.isEmpty() && params.size() != 2) {
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
-                    "method annotated with @ExposedAs must return PredicateResolver<E>",
-                    element
+                    "Virtual filter property must have exactly 2 parameters: (String op, Object[] args)",
+                    resolverMethod
             );
             return null;
         }
-        
-        // Validate parameters: must be (String, Object[])
-        if (params.size() != 2) {
-            processingEnv.getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "method annotated with @ExposedAs must have exactly 2 parameters: (String op, Object[] args)",
-                    element
-            );
-            return null;
-        }
+
         String param0Type = params.get(0).asType().toString();
         String param1Type = params.get(1).asType().toString();
         if (!param0Type.equals("java.lang.String") || !param1Type.equals("java.lang.Object[]")) {
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
-                    "method annotated with @ExposedAs must have parameters (String op, Object[] args), found: (" + param0Type + ", " + param1Type + ")",
-                    element
+                    "Virtual filter property must have parameters (String op, Object[] args), found: (" + param0Type + ", " + param1Type + ")",
+                    resolverMethod
             );
             return null;
         }
 
-        String methodName = method.getSimpleName().toString();
-        boolean isStatic = method.getModifiers().contains(Modifier.STATIC);
+        final String referenceName = annotation.value();
+        if (observedField.contains(referenceName)) {
+            return null;
+        }
+
+        String methodName = resolverMethod.getSimpleName().toString();
+        boolean isStatic = resolverMethod.getModifiers().contains(Modifier.STATIC);
         String resolverClassName = resolverClass.getQualifiedName().toString();
 
+        observedField.add(referenceName);
         return FieldMetadata.virtualField(
-                annotation.value(),
+                referenceName,
                 methodName,
                 annotation.operators(),
                 resolverClassName,
@@ -138,8 +173,8 @@ public class FieldAnalyzer {
         );
     }
 
-    private SupportedType extractJavaType(VariableElement field) {
-        TypeMirror typeMirror = field.asType();
+    private SupportedType extractJavaType(ExecutableElement methodElement) {
+        TypeMirror typeMirror = methodElement.getReturnType();
         return extractSupportedType(typeMirror);
     }
 
@@ -159,8 +194,8 @@ public class FieldAnalyzer {
         return SupportedType.UNKNOWN;
     }
 
-    private Op[] extractOperators(VariableElement field, SupportedType supportedType) {
-        ExposedAs annotation = field.getAnnotation(ExposedAs.class);
+    private Op[] extractOperators(ExecutableElement methodElement, SupportedType supportedType) {
+        ExposedAs annotation = methodElement.getAnnotation(ExposedAs.class);
         if (annotation != null && annotation.operators().length > 0) {
             return annotation.operators();
         }
@@ -168,45 +203,15 @@ public class FieldAnalyzer {
     }
 
     // Les méthodes utilitaires restent les mêmes
-    private String extractRefName(VariableElement field) {
-        ExposedAs annotation = field.getAnnotation(ExposedAs.class);
+    private String extractRefName(ExecutableElement methodElement) {
+        ExposedAs annotation = methodElement.getAnnotation(ExposedAs.class);
         if (annotation != null && !annotation.value().isEmpty()) {
             return annotation.value();
         }
-        return toUpperSnakeCase(field.getSimpleName().toString());
+        return toUpperSnakeCase(StringUtils.toJavaNamingAwareFieldName(methodElement));
     }
 
     private String toUpperSnakeCase(String camelCase) {
         return camelCase.replaceAll("([a-z])([A-Z])", "$1_$2").toUpperCase();
     }
-
-    private record ProviderMirror(TypeElement typeElement, String beanName) {}
-
-    /**
-     * Récupère les virtualResolvers de manière safe (sans MirroredTypesException)
-     */
-    private List<ProviderMirror> getVirtualResolversSafe(TypeElement projectionClass) {
-        Elements elementUtils = processingEnv.getElementUtils();
-        List<ProviderMirror> resolvers = new ArrayList<>();
-
-        AnnotationProcessorUtils.processExplicitFields(
-                projectionClass,
-                Projection.class.getName(),
-                params -> {
-                    List<Map<String,Object>> providers = (List<Map<String, Object>>) params.get("providers");
-                    if (providers == null) return;
-
-                    for (Map<String, Object> provider : providers) {
-                        resolvers.add(new ProviderMirror(
-                                elementUtils.getTypeElement((String) provider.get("value")),
-                                (String) provider.get("name")
-                        ));
-                    }
-                },
-                null
-        );
-
-        return resolvers;
-    }
-
 }
