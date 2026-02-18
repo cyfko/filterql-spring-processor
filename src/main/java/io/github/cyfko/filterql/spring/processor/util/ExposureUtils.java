@@ -188,8 +188,9 @@ public class ExposureUtils {
      * @param penv              processing environment
      * @return the parameterized type mirror
      */
-    public static TypeMirror parameterizedWith(String parameterizedFqcn, TypeElement typeUsed,
-            ProcessingEnvironment penv) {
+    public static TypeMirror parameterizedWith(String parameterizedFqcn,
+                                               TypeElement typeUsed,
+                                               ProcessingEnvironment penv) {
         Elements elementUtils = penv.getElementUtils();
         Types typeUtils = penv.getTypeUtils();
 
