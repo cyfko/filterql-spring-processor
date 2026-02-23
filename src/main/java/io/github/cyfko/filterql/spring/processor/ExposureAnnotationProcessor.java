@@ -76,7 +76,8 @@ public class ExposureAnnotationProcessor extends AbstractProcessor {
     private AnnotationExtractor annotationExtractor;
     private Logger logger;
 
-    private boolean enumGenerated;
+    private boolean enumGenerated = false;
+    private boolean artefactProcessed = false;
     private Map<TypeElement, List<FieldMetadata>> pendingProjections = new LinkedHashMap<>();
 
     /**
@@ -127,7 +128,7 @@ public class ExposureAnnotationProcessor extends AbstractProcessor {
 
         if (roundEnv.processingOver()) {
             // Dernier round - générer les fichiers globaux
-            if (enumGenerated) {
+            if (enumGenerated && artefactProcessed) {
                 generateConfigFiles();
             }
             return false;
@@ -141,10 +142,11 @@ public class ExposureAnnotationProcessor extends AbstractProcessor {
                 }
             }
             enumGenerated = true;
-        } else {
+        } else if (!artefactProcessed) {
             for (var element : pendingProjections.keySet()) {
                 processArtefact(element);
             }
+            artefactProcessed = true;
         }
 
         return false; // Continue vers le prochain round
@@ -202,8 +204,7 @@ public class ExposureAnnotationProcessor extends AbstractProcessor {
             String packageName = getPackageName(projectionClass);
             String projectionFqcn = projectionClass.toString();
             String entityClassFqcn = extractEntityClassName(projectionClass.getAnnotation(Projection.class));
-            configGenerator.register(packageName, projectionFqcn, pendingProjections.get(projectionClass),
-                    entityClassFqcn);
+            configGenerator.register(packageName, projectionFqcn, pendingProjections.get(projectionClass), entityClassFqcn);
         } catch (Exception e) {
             logger.error(e.getMessage(), projectionClass);
         }
