@@ -32,17 +32,42 @@ This processor provides:
 Add the processor as a `provided` dependency:
 
 ```xml
-<dependency>
-    <groupId>io.github.cyfko</groupId>
-    <artifactId>filterql-spring-processor</artifactId>
-    <version>4.0.0</version>
-    <scope>provided</scope>
-</dependency>
+<build>
+    <plugins>
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <configuration>
+                <annotationProcessorPaths>
+                    <path>
+                        <groupId>io.github.cyfko</groupId>
+                        <artifactId>filterql-spring-processor</artifactId>
+                        <version>1.0.0</version>
+                    </path>
+                </annotationProcessorPaths>
+            </configuration>
+        </plugin>
+    </plugins>
+</build>
 ```
+### Gradle
+
+Add the processor as a `annotationProcessor` dependency:
+
+```kotlin
+plugins { 
+    java
+}
+
+dependencies {
+    annotationProcessor("io.github.cyfko:filterql-spring-processor:1.0.0")
+}
+```
+
 
 The annotation processor will be automatically detected and executed during compilation thanks to `auto-service`.
 
-> **Note:** This module requires `filterql-spring-api` as a dependency. Make sure you have it in your runtime dependencies.
+> **Note:** This module requires `filterql-spring` as a dependency. Make sure you have it in your runtime dependencies.
 
 ## 🏗️ Architecture
 

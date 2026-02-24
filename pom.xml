@@ -32,7 +32,7 @@
 
     <scm>
         <connection>scm:git:git://github.com/cyfko/filterql-spring-processor</connection>
-        <developerConnection>git@github.com:cyfko/filterql-spring-processor.git</developerConnection>
+        <developerConnection>scm:git:git@github.com:cyfko/filterql-spring-processor.git</developerConnection>
         <url>https://github.com/cyfko/filterql-spring-processor/tree/main/filterql-spring-processor</url>
     </scm>
 
